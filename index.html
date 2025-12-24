@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>🎄 Gesture Christmas Tree</title>
+
+<!-- ===== 样式 ===== -->
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at top, #1b3a2a, #050807);
+  font-family: system-ui;
+  color: #e6c27a;
+}
+
+/* UI */
+#ui {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+}
+
+#ui input {
+  background: rgba(10,20,15,.8);
+  color: #e6c27a;
+  border: 1px solid #e6c27a55;
+  padding: 6px;
+}
+
+#hint {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: .8;
+}
+
+canvas {
+  display: block;
+}
+</style>
+</head>
+
+<body>
+<div id="ui">
+  <input type="file" id="upload" accept="image/*" multiple />
+  <div id="hint">
+    ✊ 合拢 ｜ 🖐️ 散开 ｜ 🔄 旋转 ｜ 🤏 抓取照片
+  </div>
+</div>
+
+<canvas id="c"></canvas>
+
+<!-- ===== Three.js ===== -->
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+<!-- ===== MediaPipe Hands ===== -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<script>
+/* =========================================================
+   1. Three.js 基础场景
+========================================================= */
+const canvas = document.getElementById('c');
+const scene = new THREE.Scene();
+
+scene.fog = new THREE.Fog(0x050807, 8, 30);
+
+const camera = new THREE.PerspectiveCamera(
+  60, window.innerWidth / window.innerHeight, 0.1, 100
+);
+camera.position.set(0, 2.5, 8);
+
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true
+});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+/* 光照（电影感） */
+scene.add(new THREE.AmbientLight(0x664400, 0.6));
+
+const keyLight = new THREE.PointLight(0xffd27d, 2, 30);
+keyLight.position.set(0, 6, 4);
+scene.add(keyLight);
+
+/* =========================================================
+   2. 状态机定义
+========================================================= */
+const STATE = {
+  CONE: 'cone',        // 合拢
+  SCATTER: 'scatter',  // 散开
+  PHOTO: 'photo'       // 照片放大
+};
+let currentState = STATE.CONE;
+
+/* =========================================================
+   3. 圣诞树 Instanced 粒子
+========================================================= */
+const COUNT = 800;
+const dummy = new THREE.Object3D();
+
+const geo = new THREE.SphereGeometry(0.06, 8, 8);
+const mat = new THREE.MeshStandardMaterial({
+  color: 0xe6c27a,
+  roughness: 0.35,
+  metalness: 0.8,
+  emissive: 0x332200
+});
+
+const instanced = new THREE.InstancedMesh(geo, mat, COUNT);
+scene.add(instanced);
+
+const coneTargets = [];
+const scatterTargets = [];
+
+for (let i = 0; i < COUNT; i++) {
+  // 圣诞树锥体分布
+  const h = Math.random();
+  const r = (1 - h) * 1.6 * Math.random();
+  const a = Math.random() * Math.PI * 2;
+
+  coneTargets.push(new THREE.Vector3(
+    Math.cos(a) * r,
+    h * 3,
+    Math.sin(a) * r
+  ));
+
+  scatterTargets.push(new THREE.Vector3(
+    (Math.random() - .5) * 10,
+    (Math.random() - .5) * 6,
+    (Math.random() - .5) * 10
+  ));
+}
+
+/* =========================================================
+   4. 照片云
+========================================================= */
+const photoGroup = new THREE.Group();
+scene.add(photoGroup);
+
+const photos = [];
+
+function addPhoto(texture) {
+  const mat = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true
+  });
+
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    mat
+  );
+
+  mesh.position.copy(
+    scatterTargets[Math.floor(Math.random() * scatterTargets.length)]
+  );
+  mesh.scale.setScalar(0.8);
+
+  photoGroup.add(mesh);
+  photos.push(mesh);
+}
+
+/* =========================================================
+   5. 手势识别（简化版逻辑）
+========================================================= */
+let handState = 'unknown';
+
+function analyzeHand(landmarks) {
+  const palm = landmarks[0];
+  const tip = landmarks[8]; // 食指
+
+  const dist = Math.hypot(
+    palm.x - tip.x,
+    palm.y - tip.y
+  );
+
+  if (dist < 0.1) return 'fist';
+  if (dist > 0.25) return 'open';
+  return 'pinch';
+}
+
+/* =========================================================
+   6. MediaPipe 初始化
+========================================================= */
+const hands = new Hands({
+  locateFile: f =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
+});
+
+hands.onResults(res => {
+  if (!res.multiHandLandmarks?.length) return;
+
+  const s = analyzeHand(res.multiHandLandmarks[0]);
+
+  if (s !== handState) {
+    handState = s;
+
+    if (s === 'fist') currentState = STATE.CONE;
+    if (s === 'open') currentState = STATE.SCATTER;
+    if (s === 'pinch') currentState = STATE.PHOTO;
+  }
+});
+
+/* 摄像头 */
+const video = document.createElement('video');
+const cam = new Camera(video, {
+  onFrame: async () => {
+    await hands.send({ image: video });
+  },
+  width: 640,
+  height: 480
+});
+cam.start();
+
+/* =========================================================
+   7. 动画循环
+========================================================= */
+function animate() {
+  requestAnimationFrame(animate);
+
+  for (let i = 0; i < COUNT; i++) {
+    const target =
+      currentState === STATE.CONE
+        ? coneTargets[i]
+        : scatterTargets[i];
+
+    instanced.getMatrixAt(i, dummy.matrix);
+    dummy.position.lerp(target, 0.05);
+    dummy.updateMatrix();
+    instanced.setMatrixAt(i, dummy.matrix);
+  }
+  instanced.instanceMatrix.needsUpdate = true;
+
+  renderer.render(scene, camera);
+}
+animate();
+
+/* =========================================================
+   8. 照片上传
+========================================================= */
+document.getElementById('upload').addEventListener('change', e => {
+  [...e.target.files].forEach(f => {
+    const url = URL.createObjectURL(f);
+    new THREE.TextureLoader().load(url, t => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      addPhoto(t);
+    });
+  });
+});
+
+/* =========================================================
+   9. Resize
+========================================================= */
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
