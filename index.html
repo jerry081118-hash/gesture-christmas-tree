@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>🎄 Gesture Christmas Tree</title>
+<style>
+html, body {
+  margin: 0;
+  overflow: hidden;
+  background: radial-gradient(#0b2f1a, #020b07);
+  font-family: system-ui;
+}
+#ui {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  color: #e6c27a;
+}
+input {
+  background: #123;
+  color: #e6c27a;
+}
+canvas { display: block; }
+</style>
+</head>
+
+<body>
+<div id="ui">
+  <input type="file" id="upload" multiple accept="image/*">
+  <div>✋ 手势控制圣诞树</div>
+</div>
+
+<video id="video" autoplay playsinline style="display:none"></video>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.159/build/three.module.js';
+import { Hands } from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
+import { Camera } from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
+
+/* ---------------- 基础 Three.js ---------------- */
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x041a10, 10, 60);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0, 5, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+/* ---------------- 灯光（金碧辉煌） ---------------- */
+scene.add(new THREE.AmbientLight(0x335533, 0.6));
+const keyLight = new THREE.PointLight(0xffd27d, 3, 50);
+keyLight.position.set(5, 10, 10);
+scene.add(keyLight);
+
+/* ---------------- 圣诞树 Instanced 粒子 ---------------- */
+const COUNT = 400;
+const geom = new THREE.SphereGeometry(0.15, 12, 12);
+const mat = new THREE.MeshStandardMaterial({
+  color: 0xd4af37,
+  emissive: 0x331a00,
+  metalness: 0.9,
+  roughness: 0.25
+});
+const mesh = new THREE.InstancedMesh(geom, mat, COUNT);
+scene.add(mesh);
+
+const dummy = new THREE.Object3D();
+const treePos = [];
+const scatterPos = [];
+
+/* 初始化位置 */
+for (let i = 0; i < COUNT; i++) {
+  const h = Math.random() * 10;
+  const r = (1 - h / 10) * 4;
+  treePos.push(new THREE.Vector3(
+    Math.cos(i) * r,
+    h,
+    Math.sin(i) * r
+  ));
+  scatterPos.push(new THREE.Vector3(
+    (Math.random()-0.5)*20,
+    (Math.random()-0.5)*20,
+    (Math.random()-0.5)*20
+  ));
+}
+
+/* ---------------- 照片云 ---------------- */
+const photoGroup = new THREE.Group();
+scene.add(photoGroup);
+let photos = [];
+
+document.getElementById('upload').onchange = e => {
+  [...e.target.files].forEach(file => {
+    const tex = new THREE.TextureLoader().load(URL.createObjectURL(file));
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(2,2),
+      new THREE.MeshStandardMaterial({ map: tex })
+    );
+    plane.position.copy(scatterPos[Math.random()*scatterPos.length|0]);
+    photoGroup.add(plane);
+    photos.push(plane);
+  });
+};
+
+/* ---------------- 状态管理 ---------------- */
+let state = 'tree'; // tree | scatter | photo
+let transition = 0;
+
+function updateInstances(target, speed=0.02) {
+  transition += speed;
+  transition = Math.min(transition,1);
+
+  for (let i = 0; i < COUNT; i++) {
+    dummy.position.lerpVectors(
+      mesh.getMatrixAt(i, new THREE.Matrix4()).getPosition(new THREE.Vector3()),
+      target[i],
+      transition
+    );
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+/* ---------------- MediaPipe Hands ---------------- */
+const video = document.getElementById('video');
+
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+hands.setOptions({
+  maxNumHands: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
+});
+
+hands.onResults(res => {
+  if (!res.multiHandLandmarks) return;
+  const lm = res.multiHandLandmarks[0];
+
+  const palmOpen =
+    lm[8].y < lm[6].y &&
+    lm[12].y < lm[10].y &&
+    lm[16].y < lm[14].y &&
+    lm[20].y < lm[18].y;
+
+  const pinch =
+    Math.hypot(
+      lm[4].x - lm[8].x,
+      lm[4].y - lm[8].y
+    ) < 0.05;
+
+  if (pinch) {
+    state = 'photo';
+  } else if (palmOpen) {
+    state = 'scatter';
+  } else {
+    state = 'tree';
+  }
+
+  // 相机旋转
+  camera.rotation.y += (lm[0].x - 0.5) * 0.02;
+});
+
+const cam = new Camera(video, {
+  onFrame: async () => await hands.send({image: video}),
+  width: 640,
+  height: 480
+});
+cam.start();
+
+/* ---------------- 动画循环 ---------------- */
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (state === 'tree') {
+    transition = 0;
+    updateInstances(treePos);
+  }
+  if (state === 'scatter') {
+    transition = 0;
+    updateInstances(scatterPos);
+  }
+  if (state === 'photo' && photos.length) {
+    photos[0].scale.lerp(new THREE.Vector3(3,3,3),0.05);
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+window.onresize = () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+};
+</script>
+</body>
+</html>
