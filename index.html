@@ -2,13 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>The Golden Glow - Merry Christmas</title>
     <style>
         :root { --gold: #D4AF37; --red: #B22222; }
-        body { margin: 0; overflow: hidden; background: #000; font-family: "Georgia", serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: "Georgia", serif; touch-action: none; }
         
-        /* 极致奢华启动页 */
+        /* 启动页 */
         #start-overlay {
             position: fixed; inset: 0; z-index: 1000;
             background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
@@ -17,37 +17,33 @@
         }
         .glass-card {
             background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(30px);
-            padding: 4rem; border-radius: 2rem; border: 1px solid rgba(212, 175, 55, 0.15);
-            text-align: center; box-shadow: 0 0 80px rgba(0,0,0,0.9);
+            padding: 2rem; border-radius: 2rem; border: 1px solid rgba(212, 175, 55, 0.15);
+            text-align: center; width: 80%; max-width: 400px;
         }
-        .title { color: var(--gold); font-size: 3rem; letter-spacing: 12px; margin-bottom: 20px; font-weight: 200; text-shadow: 0 0 20px rgba(212,175,55,0.4); }
+        .title { color: var(--gold); font-size: 2rem; letter-spacing: 6px; margin-bottom: 10px; font-weight: 200; }
         
-        .loader-wrap { width: 300px; margin: 30px 0; }
+        .loader-wrap { width: 100%; margin: 30px 0; }
         .bar-bg { width: 100%; height: 1px; background: rgba(255,255,255,0.1); position: relative; }
         #bar-fill { width: 0%; height: 100%; background: var(--gold); position: absolute; transition: width 0.4s; box-shadow: 0 0 15px var(--gold); }
         
         #enter-btn {
             background: transparent; color: var(--gold); border: 1px solid var(--gold);
-            padding: 12px 60px; font-size: 1rem; border-radius: 40px; cursor: pointer;
-            opacity: 0.2; pointer-events: none; transition: all 0.5s;
+            padding: 12px 40px; font-size: 1rem; border-radius: 40px; cursor: pointer;
+            opacity: 0.3; pointer-events: none; transition: all 0.5s;
         }
-        #enter-btn.active { opacity: 1; pointer-events: auto; background: rgba(212,175,55,0.1); }
-        #enter-btn:hover { background: var(--gold); color: #000; box-shadow: 0 0 30px var(--gold); }
+        #enter-btn.active { opacity: 1; pointer-events: auto; }
 
-        /* 预览与提示 */
+        /* 视频预览框 - 移动端适配 */
         #video-box {
-            position: absolute; top: 30px; right: 30px; width: 200px; height: 150px;
-            border-radius: 12px; border: 1px solid rgba(212,175,55,0.3); overflow: hidden;
+            position: absolute; top: 20px; right: 20px; width: 120px; height: 90px;
+            border-radius: 8px; border: 1px solid rgba(212, 175, 55, 0.3); overflow: hidden;
             transform: scaleX(-1); background: #000; z-index: 100;
         }
+        #input_video { width: 100%; height: 100%; object-fit: cover; }
+
         .ui-hint {
-            position: absolute; bottom: 40px; left: 40px; color: var(--gold);
-            border-left: 2px solid var(--gold); padding-left: 20px; font-size: 14px; line-height: 2.2;
-            letter-spacing: 1px; text-transform: uppercase;
-        }
-        .upload-btn {
-            position: absolute; bottom: 40px; right: 40px; background: var(--red);
-            color: #fff; padding: 12px 30px; border-radius: 30px; cursor: pointer; z-index: 200;
+            position: absolute; bottom: 20px; left: 20px; color: var(--gold);
+            font-size: 10px; line-height: 1.8; letter-spacing: 1px; pointer-events: none;
         }
     </style>
 </head>
@@ -56,26 +52,20 @@
 <div id="start-overlay">
     <div class="glass-card">
         <h1 class="title">THE GOLDEN GLOW</h1>
-        <p style="color: #888; letter-spacing: 4px;">电影级 AI 手势交互圣诞树</p>
+        <p style="color: #888; font-size: 12px; letter-spacing: 2px;">电影级 AI 手势交互圣诞树</p>
         <div class="loader-wrap">
             <div class="bar-bg"><div id="bar-fill"></div></div>
         </div>
-        <button id="enter-btn">ENTER SPACE</button>
+        <button id="enter-btn">等待资源加载...</button>
     </div>
 </div>
 
 <div id="container"></div>
-<div id="video-box"><video id="input_video" playsinline muted></video></div>
+<div id="video-box"><video id="input_video" playsinline muted autoplay></video></div>
 
 <div class="ui-hint">
-    Hold Fist ✊ 重构圣诞之树<br>
-    Open Palm 🖐️ 散落漫天星辰<br>
-    Pinch Fingers 👌 聚焦珍贵瞬间<br>
-    Move Hand 🔄 旋转电影视角
+    ✊ 重构 / 🖐️ 散落 / 👌 聚焦 / 🔄 旋转视角
 </div>
-
-<label class="upload-btn" for="photo-file">上传照片云</label>
-<input type="file" id="photo-file" multiple accept="image/*" style="display:none">
 
 <script type="importmap">
     {
@@ -97,200 +87,143 @@
     let currentState = 'CLOSED'; 
     let focusedPhoto = null;
 
-    // 1. 初始化极致场景
+    // --- 初始化 3D 场景 (保持你的逻辑) ---
     function init() {
         scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.02);
-
         camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 1000);
         camera.position.set(0, 2, 22);
 
-        renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.toneMapping = THREE.ReinhardToneMapping;
         document.getElementById('container').appendChild(renderer.domElement);
 
-        // 灯光：营造电影感氛围
-        const topLight = new THREE.SpotLight(0xffffff, 2);
-        topLight.position.set(0, 20, 10);
-        scene.add(topLight);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-
-        // 后期后期处理：璀璨辉光
         const renderPass = new RenderPass(scene, camera);
-        const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-        bloom.threshold = 0.15; bloom.strength = 1.4; bloom.radius = 1.0;
-        
+        const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.0, 0.4, 0.85);
         composer = new EffectComposer(renderer);
         composer.addPass(renderPass);
         composer.addPass(bloom);
 
-        createStarsBackground();
         createTreeEntities();
         window.addEventListener('resize', onResize);
     }
 
-    // 背景星空
-    function createStarsBackground() {
-        const starGeo = new THREE.BufferGeometry();
-        const starPos = new Float32Array(2000 * 3);
-        for(let i=0; i<6000; i++) starPos[i] = (Math.random()-0.5) * 100;
-        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-        const starMat = new THREE.PointsMaterial({color: 0x444444, size: 0.1});
-        scene.add(new THREE.Points(starGeo, starMat));
-    }
-
-    // 2. 创建实体圣诞树（哑光绿 + 金属金 + 圣诞红）
     function createTreeEntities() {
-        const geometries = [
-            new THREE.SphereGeometry(0.12, 16, 16),
-            new THREE.BoxGeometry(0.18, 0.18, 0.18),
-            new THREE.CylinderGeometry(0.04, 0.04, 0.5)
-        ];
-        
-        const materials = [
-            new THREE.MeshStandardMaterial({ color: 0x1A3926, roughness: 0.9, metalness: 0.1 }), // 哑光绿
-            new THREE.MeshStandardMaterial({ color: 0xD4AF37, metalness: 1, roughness: 0.2 }), // 金属金
-            new THREE.MeshStandardMaterial({ color: 0xB22222, metalness: 0.5, roughness: 0.5 }) // 圣诞红
-        ];
-
-        for (let i = 0; i < 450; i++) {
-            const mesh = new THREE.Mesh(geometries[i % 3], materials[i % 3]);
-            const t = i / 450;
-            const angle = t * Math.PI * 25;
-            const radius = (1 - t) * 5.5;
-            
-            mesh.userData.closed = new THREE.Vector3(Math.cos(angle)*radius, t*13-6, Math.sin(angle)*radius);
-            mesh.userData.scatter = new THREE.Vector3((Math.random()-0.5)*30, (Math.random()-0.5)*25, (Math.random()-0.5)*25);
-            
+        const geo = new THREE.SphereGeometry(0.1, 8, 8);
+        const mat = new THREE.MeshStandardMaterial({ color: 0xD4AF37 });
+        for (let i = 0; i < 300; i++) {
+            const mesh = new THREE.Mesh(geo, mat);
+            const t = i / 300;
+            const angle = t * Math.PI * 20;
+            const radius = (1 - t) * 5;
+            mesh.userData.closed = new THREE.Vector3(Math.cos(angle)*radius, t*12-6, Math.sin(angle)*radius);
+            mesh.userData.scatter = new THREE.Vector3((Math.random()-0.5)*20, (Math.random()-0.5)*20, (Math.random()-0.5)*20);
             mesh.position.copy(mesh.userData.closed);
-            mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, 0);
             scene.add(mesh);
             elements.push(mesh);
         }
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
     }
 
-    // 3. 状态切换
-    function transform(nextState) {
-        if(nextState === currentState) return;
-        currentState = nextState;
-        
+    function transform(state) {
+        if(state === currentState) return;
+        currentState = state;
         elements.forEach(el => {
-            const target = (nextState === 'CLOSED') ? el.userData.closed : el.userData.scatter;
-            new TWEEN.Tween(el.position).to({x: target.x, y: target.y, z: target.z}, 1500)
-                .easing(TWEEN.Easing.Exponential.Out).start();
+            const target = (state === 'CLOSED') ? el.userData.closed : el.userData.scatter;
+            new TWEEN.Tween(el.position).to({x:target.x, y:target.y, z:target.z}, 1000).start();
         });
-
-        if(nextState !== 'FOCUS' && focusedPhoto) {
-            new TWEEN.Tween(focusedPhoto.scale).to({x:1, y:1, z:1}, 1000).start();
-            new TWEEN.Tween(focusedPhoto.position).to({z: focusedPhoto.userData.scatter.z}, 1000).start();
-            focusedPhoto = null;
-        }
     }
 
-    // 4. 照片上传
-    document.getElementById('photo-file').addEventListener('change', (e) => {
-        const files = Array.from(e.target.files);
-        files.forEach(file => {
-            const url = URL.createObjectURL(file);
-            new THREE.TextureLoader().load(url, tex => {
-                const mesh = new THREE.Mesh(
-                    new THREE.PlaneGeometry(3, 3), 
-                    new THREE.MeshStandardMaterial({map: tex, side: THREE.DoubleSide, metalness: 0.2, roughness: 0.8})
-                );
-                mesh.userData.closed = new THREE.Vector3((Math.random()-0.5)*3, Math.random()*6, (Math.random()-0.5)*3);
-                mesh.userData.scatter = new THREE.Vector3((Math.random()-0.5)*25, (Math.random()-0.5)*20, (Math.random()-0.5)*20);
-                mesh.position.copy(mesh.userData.closed);
-                scene.add(mesh);
-                photos.push(mesh);
-                elements.push(mesh);
-            });
-        });
-    });
-
-    // 5. AI 手势逻辑
+    // --- 核心优化：AI 与 摄像头权限 ---
     async function initAI() {
         const video = document.getElementById('input_video');
+        const btn = document.getElementById('enter-btn');
         const overlay = document.getElementById('start-overlay');
+
+        btn.innerText = "正在申请摄像头...";
         
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // 1. 立即请求权限 (必须在点击回调的最顶层)
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user" }, 
+                audio: false 
+            });
             video.srcObject = stream;
+            // iOS 强制要求 play() 在点击事件内触发
             await video.play();
-            
-            const hands = new window.Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-            hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.75 });
-            
+
+            btn.innerText = "启动 AI 模型...";
+
+            // 2. 初始化 MediaPipe
+            const hands = new window.Hands({ 
+                locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` 
+            });
+            hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.7, modelComplexity: 1 });
+
             hands.onResults(res => {
                 if(!res.multiHandLandmarks.length) return;
                 const pts = res.multiHandLandmarks[0];
-                
                 const isFist = pts[8].y > pts[6].y && pts[12].y > pts[10].y;
                 const isOpen = pts[8].y < pts[5].y && pts[20].y < pts[17].y;
-                const pinch = Math.hypot(pts[8].x - pts[4].x, pts[8].y - pts[4].y) < 0.05;
-
-                if(pinch && photos.length > 0) {
-                    if(currentState !== 'FOCUS') {
-                        transform('FOCUS');
-                        focusedPhoto = photos[Math.floor(Math.random()*photos.length)];
-                        new TWEEN.Tween(focusedPhoto.position).to({x:0, y:0, z:12}, 1000).easing(TWEEN.Easing.Back.Out).start();
-                        new TWEEN.Tween(focusedPhoto.scale).to({x:2.5, y:2.5}, 1000).start();
-                    }
-                } else if(isFist) transform('CLOSED');
+                
+                if(isFist) transform('CLOSED');
                 else if(isOpen) transform('SCATTER');
 
-                // 视角跟随手部做细腻偏转
-                const targetX = (pts[0].x - 0.5) * -20;
-                camera.position.x += (targetX - camera.position.x) * 0.05;
+                // 视角跟随
+                camera.position.x += ((pts[0].x - 0.5) * -15 - camera.position.x) * 0.05;
                 camera.lookAt(0, 0, 0);
             });
 
-            const cam = new window.Camera(video, { onFrame: async () => await hands.send({image: video}) });
-            cam.start();
+            const cam = new window.Camera(video, {
+                onFrame: async () => { await hands.send({image: video}); },
+                width: 480, height: 360
+            });
+            await cam.start();
 
+            // 进入场景
             overlay.style.opacity = '0';
             setTimeout(() => overlay.remove(), 1000);
-        } catch (e) {
-            alert("请授予摄像头权限。建议使用 Chrome 浏览器并确保处于 HTTPS 环境。");
+
+        } catch (err) {
+            console.error(err);
+            alert("摄像头开启失败！请确保：\n1. 使用 HTTPS 访问\n2. 已授予浏览器摄像头权限\n3. 建议使用 Safari 或 Chrome");
+            btn.innerText = "重试 ENTER SPACE";
         }
     }
+
+    // 资源预加载处理
+    const loadJS = src => new Promise(res => { 
+        const s = document.createElement('script'); 
+        s.src = src; s.onload = res; 
+        s.onerror = () => alert("脚本加载失败，请检查网络");
+        document.head.append(s); 
+    });
 
     init();
     function animate(t) {
         requestAnimationFrame(animate);
         TWEEN.update(t);
-        
-        // 自动缓慢旋转
-        const rotSpeed = currentState === 'CLOSED' ? 0.005 : 0.002;
-        scene.rotation.y += rotSpeed;
-        
-        // 实体微动动画
-        elements.forEach((el, i) => {
-            if(currentState === 'CLOSED') {
-                el.position.y += Math.sin(t * 0.002 + i) * 0.002;
-            }
-        });
-
+        scene.rotation.y += 0.002;
         composer.render();
     }
     animate();
 
-    // 资源预加载
-    const loadJS = src => new Promise(res => { const s = document.createElement('script'); s.src = src; s.onload = res; document.head.append(s); });
+    // 确保库加载后再激活按钮
     Promise.all([
         loadJS("https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"),
         loadJS("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js")
     ]).then(() => {
         document.getElementById('bar-fill').style.width = '100%';
         const btn = document.getElementById('enter-btn');
+        btn.innerText = "ENTER SPACE";
         btn.classList.add('active');
-        btn.onclick = initAI;
+        btn.onclick = initAI; // 绑定点击事件
     });
 
     function onResize() {
-        camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth/window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
     }
 </script>
 </body>
