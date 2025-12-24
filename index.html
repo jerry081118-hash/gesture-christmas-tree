@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Gesture Christmas Tree - MediaPipe & Three.js</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #050a05; font-family: 'Segoe UI', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        #ui-layer { position: absolute; top: 20px; left: 20px; color: #d4af37; z-index: 10; pointer-events: none; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: gold; font-size: 24px; }
+        #video-container { position: absolute; bottom: 20px; right: 20px; width: 240px; height: 180px; border: 2px solid #d4af37; border-radius: 8px; overflow: hidden; transform: scaleX(-1); }
+        #upload-btn { position: absolute; bottom: 20px; left: 20px; pointer-events: auto; background: #c41e3a; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="loading">正在初始化圣诞魔法 (加载模型/相机)...</div>
+    
+    <div id="ui-layer">
+        <h1>Hand Christmas Magic</h1>
+        <p>🖐️ 张开: 散开 | ✊ 握拳: 合拢 | 🤏 抓取: 放大 | 🔄 移动: 旋转相机</p>
+    </div>
+
+    <input type="file" id="upload-btn" accept="image/*" multiple value="上传照片云">
+
+    <div id="video-container">
+        <video id="input-video" style="width: 100%; height: 100%; object-fit: cover;"></video>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+    <script type="module">
+        // --- 核心配置 ---
+        const CONFIG = {
+            count: 500,
+            treeHeight: 15,
+            treeRadius: 6,
+            colors: [0x0b3d1e, 0xd4af37, 0xc41e3a, 0xffffff], // 墨绿, 金, 圣诞红, 白
+            states: { CLOSED: 'closed', EXPLODE: 'explode', FOCUS: 'focus' }
+        };
+
+        let currentState = CONFIG.states.CLOSED;
+        let scene, camera, renderer, instancedMesh, photos = [];
+        let dummy = new THREE.Object3D();
+        let targetPositions = [];
+        let randomPositions = [];
+
+        // --- 初始化场景 ---
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x050a05, 0.02);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 25);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.toneMapping = THREE.ReinhardToneMapping;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const pointLight = new THREE.PointLight(0xd4af37, 2, 50);
+            pointLight.position.set(5, 10, 5);
+            scene.add(pointLight);
+
+            createTreeElements();
+            animate();
+            
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // --- 创建圣诞树元素 ---
+        function createTreeElements() {
+            const geometries = [
+                new THREE.SphereGeometry(0.2, 8, 8),
+                new THREE.BoxGeometry(0.3, 0.3, 0.3),
+                new THREE.CylinderGeometry(0.1, 0.1, 0.5, 8)
+            ];
+
+            const material = new THREE.MeshStandardMaterial({ 
+                metalness: 0.9, 
+                roughness: 0.1,
+                emissiveIntensity: 0.5
+            });
+
+            instancedMesh = new THREE.InstancedMesh(geometries[0], material, CONFIG.count);
+            
+            for (let i = 0; i < CONFIG.count; i++) {
+                // 计算合拢态：圆锥体位置
+                const y = Math.random() * CONFIG.treeHeight;
+                const r = (1 - y / CONFIG.treeHeight) * CONFIG.treeRadius;
+                const theta = Math.random() * Math.PI * 2;
+                
+                const targetPos = new THREE.Vector3(
+                    Math.cos(theta) * r,
+                    y - CONFIG.treeHeight/2,
+                    Math.sin(theta) * r
+                );
+                targetPositions.push(targetPos);
+
+                // 计算散开态：随机球体空间
+                randomPositions.push(new THREE.Vector3(
+                    (Math.random() - 0.5) * 40,
+                    (Math.random() - 0.5) * 40,
+                    (Math.random() - 0.5) * 40
+                ));
+
+                // 设置初始颜色
+                const color = new THREE.Color(CONFIG.colors[i % CONFIG.colors.length]);
+                instancedMesh.setColorAt(i, color);
+            }
+            scene.add(instancedMesh);
+            updateInstances(CONFIG.states.CLOSED);
+        }
+
+        // --- 状态过渡动画 ---
+        function updateInstances(state) {
+            currentState = state;
+            for (let i = 0; i < CONFIG.count; i++) {
+                const target = state === CONFIG.states.CLOSED ? targetPositions[i] : randomPositions[i];
+                
+                gsap.to(dummy.position, {
+                    x: target.x,
+                    y: target.y,
+                    z: target.z,
+                    duration: 1.5 + Math.random(),
+                    ease: "expo.out",
+                    onUpdate: () => {
+                        dummy.updateMatrix();
+                        instancedMesh.setMatrixAt(i, dummy.matrix);
+                        instancedMesh.instanceMatrix.needsUpdate = true;
+                    }
+                });
+            }
+        }
+
+        // --- MediaPipe 手势识别逻辑 ---
+        const videoElement = document.getElementById('input-video');
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults((results) => {
+            if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
+            
+            const landmarks = results.multiHandLandmarks[0];
+            
+            // 1. 简单手势判定：握拳 vs 张开
+            // 计算食指指尖到掌心的距离
+            const dist = Math.hypot(landmarks[8].x - landmarks[0].x, landmarks[8].y - landmarks[0].y);
+            
+            if (dist < 0.2 && currentState !== CONFIG.states.CLOSED) {
+                updateInstances(CONFIG.states.CLOSED);
+            } else if (dist > 0.4 && currentState !== CONFIG.states.EXPLODE) {
+                updateInstances(CONFIG.states.EXPLODE);
+            }
+
+            // 2. 旋转逻辑 (基于手掌中心移动)
+            if (currentState === CONFIG.states.EXPLODE) {
+                const centerX = landmarks[9].x - 0.5;
+                const centerY = landmarks[9].y - 0.5;
+                gsap.to(camera.position, {
+                    x: centerX * 40,
+                    y: -centerY * 40 + 5,
+                    duration: 0.5
+                });
+                camera.lookAt(0, 0, 0);
+            }
+        });
+
+        const cameraFeed = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({ image: videoElement }); },
+            width: 640, height: 480
+        });
+        cameraFeed.start();
+
+        // --- 照片云上传处理 ---
+        document.getElementById('upload-btn').addEventListener('change', (e) => {
+            const files = e.target.files;
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const texture = new THREE.TextureLoader().load(event.target.result);
+                    const geometry = new THREE.PlaneGeometry(2, 2);
+                    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+                    const photo = new THREE.Mesh(geometry, material);
+                    
+                    photo.position.set((Math.random()-0.5)*20, (Math.random()-0.5)*20, (Math.random()-0.5)*20);
+                    scene.add(photo);
+                    photos.push(photo);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // --- 渲染循环 ---
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 基础自转
+            if (instancedMesh && currentState === CONFIG.states.CLOSED) {
+                instancedMesh.rotation.y += 0.005;
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        initScene();
+    </script>
+</body>
+</html>
